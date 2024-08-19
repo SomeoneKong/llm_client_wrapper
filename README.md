@@ -60,3 +60,8 @@
 * 商汤
 * 讯飞
 
+### API代理商及第三方推理平台
+
+* OpenRouter
+* Together
+* SiliconFlow
