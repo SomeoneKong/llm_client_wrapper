@@ -34,3 +34,29 @@
 * VL模型，其他多模态数据的支持
 * Assistant API，文件上传API
 
+## 支持的LLM供应商列表
+
+### 海外
+
+* OpenAI
+* Google
+* Anthropic
+* Mistral
+* Reka
+
+### 国内
+
+* 智谱
+* 阿里巴巴（阿里云灵积）
+* 字节跳动（火山引擎）
+* 百度
+* 零一万物
+* 深度求索
+* 阶跃星辰
+* Moonshot
+* 百川智能
+* Minimax 
+* 腾讯
+* 商汤
+* 讯飞
+
