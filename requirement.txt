@@ -1,0 +1,13 @@
+socksio
+aiohttp
+tiktoken
+openai
+google-generativeai
+anthropic
+qianfan
+spark_ai_python
+sensenova
+reka-api
+tencentcloud-sdk-python
+mistralai
+together
