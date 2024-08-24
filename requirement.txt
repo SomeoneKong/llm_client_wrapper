@@ -5,7 +5,6 @@ openai
 google-generativeai
 anthropic
 qianfan
-spark_ai_python
 sensenova
 reka-api
 mistralai
