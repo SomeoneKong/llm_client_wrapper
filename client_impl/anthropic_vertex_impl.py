@@ -1,29 +1,53 @@
 import time
-
+import os
 import llm_client_base
 
-# pip install anthropic
-import anthropic
+# pip install anthropic[vertex]
+from anthropic.lib.vertex import AsyncAnthropicVertex
 
 # config from .env
-# ANTHROPIC_API_KEY
+# GOOGLE_APPLICATION_CREDENTIALS
 # HTTP_PROXY
 # HTTPS_PROXY
 
 
-
-class Anthropic_Client(llm_client_base.LlmClientBase):
+class AnthropicVertex_Client(llm_client_base.LlmClientBase):
     support_system_message: bool = True
 
-    def __init__(self):
+    def __init__(self,
+                 google_auth_json_file=None,
+                 google_region='us-east5',
+                 ):
         super().__init__()
+        # https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-claude?hl=zh-cn
 
-        api_key = os.getenv('ANTHROPIC_API_KEY')
-        assert api_key is not None
+        # 使用json文件凭据
+        # https://console.cloud.google.com/apis/credentials
+        # 需要权限 Consumer Procurement Entitlement Manager, Vertex AI User
+        self.google_auth_json_file = google_auth_json_file or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        assert self.google_auth_json_file, 'Please provide google_auth_json_file'
 
-        self.client = anthropic.AsyncAnthropic(
-            api_key=api_key
+        # token 有效期 1小时
+        self.project_id, self.access_token = self._get_access_token()
+        self.region = google_region
+
+        self.client = AsyncAnthropicVertex(
+            region=google_region,
+            project_id=self.project_id,
+            access_token=self.access_token,
         )
+
+    def _get_access_token(self):
+        import google.auth
+        import google.auth.transport.requests
+        from google.oauth2 import service_account
+
+        credentials = service_account.Credentials.from_service_account_file(self.google_auth_json_file, scopes=[
+            'https://www.googleapis.com/auth/cloud-platform'])
+        auth_req = google.auth.transport.requests.Request()
+        credentials.refresh(auth_req)
+
+        return credentials.project_id, credentials.token
 
     async def chat_stream_async(self, model_name, history, model_param, client_param):
         model_param = model_param.copy()
@@ -65,8 +89,8 @@ class Anthropic_Client(llm_client_base.LlmClientBase):
             'role': current_message.role,
             'accumulated_content': current_message.content[0].text,
             'finish_reason': current_message.stop_reason,
-            'real_model': current_message.model,
             'usage': usage,
+            'real_model': current_message.model,
             'first_token_time': first_token_time - start_time if first_token_time else None,
             'completion_time': completion_time - start_time,
         }
@@ -81,8 +105,9 @@ if __name__ == '__main__':
     os.environ['HTTP_PROXY'] = "http://127.0.0.1:7890/"
     os.environ['HTTPS_PROXY'] = "http://127.0.0.1:7890/"
 
-    client = Anthropic_Client()
-    model_name = "claude-3-haiku-20240307"
+    client = AnthropicVertex_Client()
+    # model_name = "claude-3-5-sonnet@20240620"
+    model_name = "claude-3-5-sonnet"
     history = [{"role": "user", "content": "Hello, how are you?"}]
 
     model_param = {

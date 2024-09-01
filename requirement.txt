@@ -3,7 +3,7 @@ aiohttp
 tiktoken
 openai
 google-generativeai
-anthropic
+anthropic[vertex]
 qianfan
 sensenova
 reka-api
