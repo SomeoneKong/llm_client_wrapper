@@ -60,6 +60,13 @@ class Minimax_Client(OpenAI_Client):
                         chunk = line.decode()
 
                     yield chunk
+                elif line.startswith(b'{'):
+                    chunk = json.loads(line)
+                    yield chunk
+
+        if pending and pending.startswith(b'{'):
+            chunk = json.loads(pending)
+            yield chunk
 
     async def _chat_pro_stream_async(self, model_name, history, bot_profile_dict, model_param, client_param):
         model_param = model_param.copy()
