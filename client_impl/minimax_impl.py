@@ -40,34 +40,6 @@ class Minimax_Client(OpenAI_Client):
 
             yield chunk
 
-    async def _parse_pro_response(self, response):
-        pending = None
-        async for chunk, _ in response.content.iter_chunks():
-            if pending is not None:
-                chunk = pending + chunk
-            lines = chunk.splitlines()
-            if lines and lines[-1] and chunk and lines[-1][-1] == chunk[-1]:
-                pending = lines.pop()
-            else:
-                pending = None
-
-            for line in lines:
-                if line.startswith(b'data: '):
-                    line = line[6:]
-                    if line.startswith(b'{') or line.startswith(b'['):
-                        chunk = json.loads(line)
-                    else:
-                        chunk = line.decode()
-
-                    yield chunk
-                elif line.startswith(b'{'):
-                    chunk = json.loads(line)
-                    yield chunk
-
-        if pending and pending.startswith(b'{'):
-            chunk = json.loads(pending)
-            yield chunk
-
     async def _chat_pro_stream_async(self, model_name, history, bot_profile_dict, model_param, client_param):
         model_param = model_param.copy()
         temperature = model_param.pop('temperature')
@@ -128,7 +100,7 @@ class Minimax_Client(OpenAI_Client):
 
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers) as response:
-                async for chunk in self._parse_pro_response(response):
+                async for chunk in self._parse_sse_response(response):
                     choice0 = chunk['choices'][0]
                     # print(choice0)
                     role = choice0['messages'][0]['sender_type']

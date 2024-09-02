@@ -1,3 +1,7 @@
+import json
+
+import aiohttp
+
 
 class LlmClientBase:
     support_system_message: bool
@@ -10,6 +14,34 @@ class LlmClientBase:
 
     async def close(self):
         pass
+
+    async def _parse_sse_response(self, response: aiohttp.ClientResponse):
+        pending = None
+        async for chunk, _ in response.content.iter_chunks():
+            if pending is not None:
+                chunk = pending + chunk
+            lines = chunk.splitlines()
+            if lines and lines[-1] and chunk and lines[-1][-1] == chunk[-1]:
+                pending = lines.pop()
+            else:
+                pending = None
+
+            for line in lines:
+                if line.startswith(b'data: '):
+                    line = line[6:]
+                    if line.startswith(b'{') or line.startswith(b'['):
+                        chunk = json.loads(line)
+                    else:
+                        chunk = line.decode()
+
+                    yield chunk
+                elif line.startswith(b'{'):
+                    chunk = json.loads(line)
+                    yield chunk
+
+        if pending and pending.startswith(b'{'):
+            chunk = json.loads(pending)
+            yield chunk
 
     async def _chat_with_bot_profile_simple(self, model_name, history, bot_profile_dict, model_param, client_param):
         """

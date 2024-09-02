@@ -111,34 +111,6 @@ class Tencent_Client(llm_client_base.LlmClientBase):
 
         return output_headers
 
-    async def _parse_response(self, response):
-        pending = None
-        async for chunk, _ in response.content.iter_chunks():
-            if pending is not None:
-                chunk = pending + chunk
-            lines = chunk.splitlines()
-            if lines and lines[-1] and chunk and lines[-1][-1] == chunk[-1]:
-                pending = lines.pop()
-            else:
-                pending = None
-
-            for line in lines:
-                if line.startswith(b'data: '):
-                    line = line[6:]
-                    if line.startswith(b'{') or line.startswith(b'['):
-                        chunk = json.loads(line)
-                    else:
-                        chunk = line.decode()
-
-                    yield chunk
-                elif line.startswith(b'{'):
-                    chunk = json.loads(line)
-                    yield chunk
-
-        if pending and pending.startswith(b'{'):
-            chunk = json.loads(pending)
-            yield chunk
-
     async def chat_stream_async(self, model_name, history, model_param, client_param):
         model_param = model_param.copy()
         temperature = model_param['temperature']
@@ -197,7 +169,7 @@ class Tencent_Client(llm_client_base.LlmClientBase):
 
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers) as response:
-                async for chunk in self._parse_response(response):
+                async for chunk in self._parse_sse_response(response):
                     if 'Response' in chunk:
                         assert 'Error' not in chunk['Response'], f"error: {chunk['Response']['Error']}"
                         assert False, f"error: {chunk['Response']}"
