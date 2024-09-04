@@ -13,6 +13,7 @@ from anthropic.lib.vertex import AsyncAnthropicVertex
 
 class AnthropicVertex_Client(LlmClientBase):
     support_system_message: bool = True
+    support_image_message: bool = True
 
     server_location = 'west'
 
@@ -99,6 +100,97 @@ class AnthropicVertex_Client(LlmClientBase):
 
     async def close(self):
         await self.client.close()
+
+    def convert_multimodal_message(self, content: list):
+        # https://docs.anthropic.com/en/docs/build-with-claude/vision
+        # https://docs.anthropic.com/en/api/messages-examples#vision
+
+        assert MultimodalMessageUtils.check_content_valid(content), f"Invalid content {content}"
+
+        content_part_list = []
+        for content_part in content:
+            if isinstance(content_part, MultimodalMessageContentPart_Text):
+                content_part_list.append({
+                    'type': 'text',
+                    'text': content_part.text,
+                })
+            elif isinstance(content_part, MultimodalMessageContentPart_ImageUrl):
+                assert False, "Not support ImageUrl"
+            elif isinstance(content_part, MultimodalMessageContentPart_ImagePath):
+                image = ImageFile.load_from_path(content_part.image_path)
+                assert image.image_format in ['jpeg', 'png', 'gif', 'webp'], f"Invalid image format {image.image_format}"
+
+                content_part_list.append({
+                    'type': 'image',
+                    'source': {
+                        'type': 'base64',
+                        'media_type': image.mime_type,
+                        'data': image.image_base64,
+                    }
+                })
+
+        return content_part_list
+
+    async def multimodal_chat_stream_async(self, model_name, history: List, model_param, client_param):
+        model_param = model_param.copy()
+        temperature = model_param['temperature']
+        max_tokens = model_param.pop('max_tokens', 1024 * 3)  # 必选项
+
+        system_message_list = [m for m in history if m['role'] == 'system']
+        system_prompt = system_message_list[-1]['content'] if system_message_list else []
+
+        message_list = []
+        for message in history:
+            if message['role'] == 'system':
+                continue
+
+            if isinstance(message['content'], str):
+                message_list.append({
+                    'role': message['role'],
+                    'content': message['content'],
+                })
+            elif isinstance(message['content'], list):
+                message_list.append({
+                    'role': message['role'],
+                    'content': self.convert_multimodal_message(message['content']),
+                })
+
+        current_message = None
+        start_time = time.time()
+        first_token_time = None
+        async with self.client.messages.stream(
+                model=model_name,
+                messages=message_list,
+                system=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+        ) as stream:
+            async for delta in stream.__stream_text__():
+                current_message = stream.current_message_snapshot
+                if delta and first_token_time is None:
+                    first_token_time = time.time()
+                yield LlmResponseChunk(
+                    role=current_message.role,
+                    delta_content=delta,
+                    accumulated_content=current_message.content[0].text,
+                )
+
+        completion_time = time.time()
+
+        usage = {
+            'prompt_tokens': current_message.usage.input_tokens,
+            'completion_tokens': current_message.usage.output_tokens,
+        }
+        yield LlmResponseTotal(
+            role=current_message.role,
+            accumulated_content=current_message.content[0].text,
+            finish_reason=current_message.stop_reason,
+            real_model=current_message.model,
+            usage=usage,
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+        )
+
 
 if __name__ == '__main__':
     import asyncio

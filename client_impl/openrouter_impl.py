@@ -13,6 +13,7 @@ from .openai_impl import OpenAI_Client
 
 class OpenRouter_Client(OpenAI_Client):
     support_system_message: bool = True
+    support_image_message: bool = True
 
     server_location = 'west'
 

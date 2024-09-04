@@ -15,6 +15,7 @@ from openai import AsyncOpenAI
 
 class OpenAI_Client(LlmClientBase):
     support_system_message: bool = True
+    support_image_message: bool = True
 
     server_location = 'west'
 
@@ -186,6 +187,115 @@ class OpenAI_Client(LlmClientBase):
             completion_time=completion_time - start_time,
         )
 
+    def convert_multimodal_message(self, content: list, image_detail_config=None):
+        assert MultimodalMessageUtils.check_content_valid(content), f"Invalid content {content}"
+
+        content_part_list = []
+        for content_part in content:
+            if isinstance(content_part, MultimodalMessageContentPart_Text):
+                content_part_list.append({
+                    'type': 'text',
+                    'text': content_part.text,
+                })
+            elif isinstance(content_part, MultimodalMessageContentPart_ImageUrl):
+                part_info = {
+                    'type': 'image_url',
+                    'image_url': {
+                        'url': content_part.url,
+                    }
+                }
+                if image_detail_config:
+                    part_info['image_url']['detail'] = image_detail_config
+                content_part_list.append(part_info)
+            elif isinstance(content_part, MultimodalMessageContentPart_ImagePath):
+                image = ImageFile.load_from_path(content_part.image_path)
+                data_str = f'data:{image.mime_type};base64,{image.image_base64}'
+                part_info = {
+                    'type': 'image_url',
+                    'image_url': {
+                        'url': data_str,
+                    }
+                }
+                if image_detail_config:
+                    part_info['image_url']['detail'] = image_detail_config
+                content_part_list.append(part_info)
+
+        return content_part_list
+
+    async def multimodal_chat_stream_async(self, model_name, history: List, model_param, client_param):
+        # https://platform.openai.com/docs/guides/vision
+        # https://openai.com/api/pricing/
+
+        req_args, left_model_param, left_client_param = self._extract_args(model_name, model_param, client_param)
+        if left_model_param:
+            req_args['extra_body'] = left_model_param
+
+        message_list = []
+        for message in history:
+            if isinstance(message['content'], str):
+                message_list.append({
+                    'role': message['role'],
+                    'content': message['content'],
+                })
+            elif isinstance(message['content'], list):
+                message_list.append({
+                    'role': message['role'],
+                    'content': self.convert_multimodal_message(message['content'], image_detail_config='high'),
+                })
+        req_args['messages'] = message_list
+
+
+        start_time = time.time()
+
+        system_fingerprint = None
+        role = None
+        result_buffer = ''
+        finish_reason = None
+        usage = None
+        first_token_time = None
+        real_model = None
+
+        async with await self.client.chat.completions.create(**req_args) as response:
+            async for chunk in response:
+                # print(chunk)
+                system_fingerprint = chunk.system_fingerprint
+                if chunk.choices:
+                    finish_reason = chunk.choices[0].finish_reason
+                    delta_info = chunk.choices[0].delta
+                    if delta_info:
+                        if delta_info.role:
+                            role = delta_info.role
+                        if delta_info.content:
+                            result_buffer += delta_info.content
+
+                            if first_token_time is None:
+                                first_token_time = time.time()
+
+                            yield LlmResponseChunk(
+                                role=role or 'assistant',  # for yi-vision
+                                delta_content=delta_info.content,
+                                accumulated_content=result_buffer,
+                            )
+
+                if chunk.usage:
+                    usage = chunk.usage.dict()
+                if chunk.model:
+                    real_model = chunk.model
+
+
+        completion_time = time.time()
+
+        yield LlmResponseTotal(
+            role=role or 'assistant',  # for yi-vision
+            accumulated_content=result_buffer,
+            finish_reason=finish_reason,
+            system_fingerprint=system_fingerprint,
+            real_model=real_model,
+            usage=usage or {},
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+        )
+
 
 if __name__ == '__main__':
     import asyncio
@@ -195,17 +305,43 @@ if __name__ == '__main__':
     os.environ['HTTPS_PROXY'] = "http://127.0.0.1:7890/"
 
     client = OpenAI_Client(api_key=os.getenv('OPENAI_API_KEY'))
-    model_name = "gpt-4o-mini"
 
-    history = [{"role": "user", "content": "Hello, how are you?"}]
+    def test_text():
+        model_name = "gpt-4o-mini"
+        history = [{"role": "user", "content": "Hello, how are you?"}]
 
-    model_param = {
-        'temperature': 0.01,
-        # 'json_mode': True,
-    }
+        model_param = {
+            'temperature': 0.01,
+            # 'json_mode': True,
+        }
 
-    async def main():
-        async for chunk in client.chat_stream_async(model_name, history, model_param, client_param={}):
-            print(chunk)
+        async def main():
+            async for chunk in client.chat_stream_async(model_name, history, model_param, client_param={}):
+                print(chunk)
 
-    asyncio.run(main())
+        asyncio.run(main())
+
+
+    def test_image():
+        model_name = "gpt-4o-mini"
+
+        prompt = '''这是什么？'''
+
+        history = [{"role": "user", "content": [
+            MultimodalMessageContentPart_Text(text=prompt),
+            MultimodalMessageContentPart_ImagePath(image_path=r".\image_test\case2.png"),
+        ]}]
+
+        model_param = {
+            'temperature': 0.01,
+            # 'json_mode': True,
+        }
+
+        async def main():
+            async for chunk in client.multimodal_chat_stream_async(model_name, history, model_param, client_param={}):
+                print(chunk.get('delta_content', None), end='')
+            print()
+
+        asyncio.run(main())
+
+    test_image()

@@ -13,6 +13,7 @@ from .openai_impl import OpenAI_Client
 
 class Alibaba_Client(OpenAI_Client):
     support_system_message: bool = True
+    support_image_message: bool = True
 
     server_location = 'china'
 
@@ -32,6 +33,15 @@ class Alibaba_Client(OpenAI_Client):
         async for chunk in super().chat_stream_async(model_name, history, model_param, client_param):
             yield chunk
 
+
+    async def multimodal_chat_stream_async(self, model_name, history: List, model_param, client_param):
+        model_param = model_param.copy()
+        assert model_name.startswith('qwen-vl-'), f'Model {model_name} not support vl'
+        if 'max_tokens' in model_param:
+            model_param['max_tokens'] = min(2000, model_param['max_tokens'])
+
+        async for chunk in super().multimodal_chat_stream_async(model_name, history, model_param, client_param):
+            yield chunk
 
 if __name__ == '__main__':
     import asyncio

@@ -10,3 +10,5 @@ reka-api
 mistralai
 together
 cohere
+pillow  # for Google image
+# spark-ai-python  # for VL

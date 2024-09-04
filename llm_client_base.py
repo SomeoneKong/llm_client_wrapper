@@ -1,11 +1,78 @@
+import base64
 import json
-
-from typing import Optional, List
-from typing_extensions import Literal
+import imghdr
+from typing import Optional, List, Any, Union
+from typing_extensions import Self, Literal
 
 import aiohttp
 
 from pydantic import BaseModel
+
+class MultimodalMessageContentPart_Text(BaseModel):
+    text: str
+
+class MultimodalMessageContentPart_ImageUrl(BaseModel):
+    image_url: str
+
+class MultimodalMessageContentPart_ImagePath(BaseModel):
+    image_path: str
+
+class MultimodalMessageContentPart_AudioPath(BaseModel):
+    audio_path: str
+
+class MultimodalMessageContentPart_VideoPath(BaseModel):
+    video_path: str
+
+
+
+class ImageFile:
+    def __init__(self,
+                 image_path: str,
+                 image_format: str,
+                 mime_type: str,
+                 image_base64: str,
+                 ):
+        self.image_path = image_path
+        self.image_format = image_format
+        self.mime_type = mime_type
+        self.image_base64 = image_base64
+
+    @staticmethod
+    def load_from_path(image_path: str):
+        image_format = imghdr.what(image_path)
+        assert image_format in ['bmp', 'jpeg', 'png', 'gif', 'tiff',
+                                'webp'], f"image format {image_format} not supported"
+
+        mime_type = f"image/{image_format}"
+
+        image_bytes = open(image_path, "rb").read()
+        image_base64 = base64.b64encode(image_bytes).decode()
+
+        return ImageFile(
+            image_path=image_path,
+            image_format=image_format,
+            mime_type=mime_type,
+            image_base64=image_base64,
+        )
+
+class MultimodalMessageUtils:
+    @staticmethod
+    def check_content_valid(content: list):
+        for part in content:
+            if isinstance(part, MultimodalMessageContentPart_Text):
+                continue
+            elif isinstance(part, MultimodalMessageContentPart_ImageUrl):
+                continue
+            elif isinstance(part, MultimodalMessageContentPart_ImagePath):
+                continue
+            elif isinstance(part, MultimodalMessageContentPart_AudioPath):
+                continue
+            elif isinstance(part, MultimodalMessageContentPart_VideoPath):
+                continue
+
+            return False, f"part {part} is not valid"
+
+        return True, None
 
 
 class LlmResponseChunk(BaseModel):
@@ -41,6 +108,7 @@ class LlmResponseTotal(BaseModel):
 
 class LlmClientBase:
     support_system_message: bool
+    support_image_message: bool = False
 
     support_chat_with_bot_profile_simple: bool = False
     support_multi_bot_chat: bool = False
@@ -48,6 +116,9 @@ class LlmClientBase:
     server_location: Literal['china', 'west']
 
     async def chat_stream_async(self, model_name, history, model_param, client_param):
+        raise NotImplementedError()
+
+    async def multimodal_chat_stream_async(self, model_name, history: List, model_param, client_param):
         raise NotImplementedError()
 
     async def close(self):

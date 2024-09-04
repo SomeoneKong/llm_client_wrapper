@@ -17,6 +17,7 @@ class Tencent_Client(LlmClientBase):
     # https://cloud.tencent.com/document/product/1729/105701
 
     support_system_message: bool = True
+    support_image_message: bool = True
 
     server_location = 'china'
 
@@ -216,6 +217,156 @@ class Tencent_Client(LlmClientBase):
             'first_token_time': first_token_time - start_time if first_token_time else None,
             'completion_time': completion_time - start_time,
         }
+
+    def convert_multimodal_message(self, content: list):
+        assert MultimodalMessageUtils.check_content_valid(content), f"Invalid content {content}"
+
+        content_part_list = []
+        image_counter = 0
+        for content_part in content:
+            if isinstance(content_part, MultimodalMessageContentPart_Text):
+                content_part_list.append({
+                    'Type': 'text',
+                    'Text': content_part.text,
+                })
+            elif isinstance(content_part, MultimodalMessageContentPart_ImageUrl):
+                part_info = {
+                    'Type': 'image_url',
+                    'ImageUrl': {
+                        'Url': content_part.url,
+                    }
+                }
+                content_part_list.append(part_info)
+                image_counter += 1
+            elif isinstance(content_part, MultimodalMessageContentPart_ImagePath):
+                image = ImageFile.load_from_path(content_part.image_path)
+                data_str = f'data:{image.mime_type};base64,{image.image_base64}'
+                part_info = {
+                    'Type': 'image_url',
+                    'ImageUrl': {
+                        'Url': data_str,
+                    }
+                }
+                content_part_list.append(part_info)
+                image_counter += 1
+
+        assert image_counter <= 1, f"hunyuan-vision only support 1 image, got {image_counter}"
+
+        return content_part_list
+
+    async def multimodal_chat_stream_async(self, model_name, history: List, model_param, client_param):
+        assert model_name in ['hunyuan-vision'], f"model_name {model_name} not supported vl"
+
+        model_param = model_param.copy()
+        temperature = model_param['temperature']
+        enable_search = model_param.get('enable_search', False)
+
+        start_time = time.time()
+
+        url = "https://hunyuan.tencentcloudapi.com"
+        headers = {
+            "Content-Type": "application/json",
+            "X-TC-Version": "2023-09-01",
+            "X-TC-Action": "ChatCompletions",
+        }
+
+        other_infos = {
+            "Host": "hunyuan.tencentcloudapi.com",
+        }
+
+        signed_header_list = ['Content-Type', 'Host']
+
+        message_list = []
+        for message in history:
+            if isinstance(message['content'], str):
+                message_list.append({
+                    "Role": message['role'],
+                    "Content": message['content']
+                })
+            elif isinstance(message['content'], list):
+                message_list.append({
+                    'Role': message['role'],
+                    'Contents': self.convert_multimodal_message(message['content']),
+                })
+
+        payload = {
+            "Model": model_name,
+            "Temperature": temperature,
+            "Stream": True,
+            "Messages": message_list,
+        }
+
+        if enable_search:
+            payload["SearchInfo"] = True
+            payload["Citation"] = True
+            payload["EnableEnhancement"] = True
+
+        payload_data = json.dumps(payload)
+        headers = self._gen_tencent_auth_header(
+            headers,
+            other_infos,
+            payload_data,
+            signed_header_list
+        )
+
+
+        result_buffer = ''
+        usage = None
+        role = None
+        finish_reason = None
+        search_results = None
+        first_token_time = None
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as response:
+                async for chunk in self._parse_sse_response(response):
+                    if 'Response' in chunk:
+                        assert 'Error' not in chunk['Response'], f"error: {chunk['Response']['Error']}"
+                        assert False, f"error: {chunk['Response']}"
+
+                    usage = chunk['Usage']
+                    usage = {
+                        'prompt_tokens': usage['PromptTokens'],
+                        'completion_tokens': usage['CompletionTokens'],
+                    }
+
+                    if 'SearchInfo' in chunk:
+                        search_results = chunk['SearchInfo']['SearchResults']
+
+                    choice0 = chunk['Choices'][0]
+
+                    if choice0['FinishReason']:
+                        finish_reason = choice0['FinishReason']
+
+                    if 'Delta' in choice0:
+                        role = choice0['Delta']['Role']
+                        result_buffer += choice0['Delta']['Content']
+                        if choice0['Delta']['Content'] and first_token_time is None:
+                            first_token_time = time.time()
+
+                        yield LlmResponseChunk(
+                            role=role,
+                            delta_content=choice0['Delta']['Content'],
+                            accumulated_content=result_buffer,
+                            extra={
+                                # 'usage': usage,
+                                'search_results': search_results,
+                            } if search_results else None,
+                        )
+
+        completion_time = time.time()
+
+        yield LlmResponseTotal(
+            role=role,
+            accumulated_content=result_buffer,
+            finish_reason=finish_reason,
+            usage=usage,
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+            extra={
+                'search_results': search_results,
+            } if search_results else None,
+        )
 
 
 if __name__ == '__main__':

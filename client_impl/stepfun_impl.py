@@ -35,6 +35,13 @@ class StepFun_Client(OpenAI_Client):
 
             raise
 
+    async def multimodal_chat_stream_async(self, model_name, history: List, model_param, client_param):
+        model_param = model_param.copy()
+        assert model_name.startswith('step-1v-'), f'Model {model_name} not support vl'
+
+        async for chunk in super().multimodal_chat_stream_async(model_name, history, model_param, client_param):
+            yield chunk
+
 
 if __name__ == '__main__':
     import asyncio

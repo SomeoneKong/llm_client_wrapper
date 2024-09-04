@@ -13,6 +13,8 @@ from .openai_impl import OpenAI_Client
 
 class Zhipu_Client(OpenAI_Client):
     support_system_message: bool = True
+    support_image_message: bool = True
+    
     support_chat_with_bot_profile_simple: bool = True
 
     server_location = 'china'
@@ -25,6 +27,14 @@ class Zhipu_Client(OpenAI_Client):
             api_base_url="https://open.bigmodel.cn/api/paas/v4/",
             api_key=api_key,
         )
+
+    async def multimodal_chat_stream_async(self, model_name, history: List, model_param, client_param):
+        model_param = model_param.copy()
+        if 'max_tokens' in model_param:
+            model_param['max_tokens'] = min(1024, model_param['max_tokens'])
+
+        async for chunk in super().multimodal_chat_stream_async(model_name, history, model_param, client_param):
+            yield chunk
 
     async def _chat_with_bot_profile_simple(self, model_name, history, bot_profile_dict, model_param, client_param):
         assert model_name in ["charglm-3"], f"Unsupported model_name: {model_name}"

@@ -16,6 +16,8 @@ import sensenova
 
 class SenseNova_Client(LlmClientBase):
     support_system_message: bool = True
+    support_image_message: bool = True
+
     support_multi_bot_chat: bool = True
 
     server_location = 'china'
@@ -84,6 +86,108 @@ class SenseNova_Client(LlmClientBase):
 
         yield LlmResponseTotal(
             role=role,
+            accumulated_content=result_buffer,
+            finish_reason=finish_reason,
+            usage=usage,
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+        )
+
+
+    def convert_multimodal_message(self, content: list):
+        assert MultimodalMessageUtils.check_content_valid(content), f"Invalid content {content}"
+
+        content_part_list = []
+        for content_part in content:
+            if isinstance(content_part, MultimodalMessageContentPart_Text):
+                content_part_list.append({
+                    'type': 'text',
+                    'text': content_part.text,
+                })
+            elif isinstance(content_part, MultimodalMessageContentPart_ImageUrl):
+                part_info = {
+                    'type': 'image_url',
+                    'image_url': content_part.url,
+                }
+                content_part_list.append(part_info)
+            elif isinstance(content_part, MultimodalMessageContentPart_ImagePath):
+                image = ImageFile.load_from_path(content_part.image_path)
+                part_info = {
+                    'type': 'image_base64',
+                    'image_base64': image.image_base64,
+                }
+                content_part_list.append(part_info)
+
+        return content_part_list
+
+    async def multimodal_chat_stream_async(self, model_name, history: List, model_param, client_param):
+        model_param = model_param.copy()
+        temperature = model_param['temperature']
+
+        args = {}
+        if 'max_tokens' in model_param:
+            args['max_new_tokens'] = model_param['max_tokens']
+
+        message_list = []
+        for message in history:
+            if isinstance(message['content'], str):
+                message_list.append({
+                    'role': message['role'],
+                    'content': message['content'],
+                })
+            elif isinstance(message['content'], list):
+                message_list.append({
+                    'role': message['role'],
+                    'content': self.convert_multimodal_message(message['content']),
+                })
+
+        start_time = time.time()
+        response = await sensenova.ChatCompletion.acreate(
+            model=model_name,
+            messages=message_list,
+            temperature=temperature,
+            stream=True,
+            **args
+        )
+
+        result_buffer = ''
+        usage = None
+        role = None
+        finish_reason = None
+        first_token_time = None
+
+        async for chunk_resp in response:
+            if chunk_resp.status.code != 0 and chunk_resp.data.choices[0].finish_reason == 'sensitive':
+                raise SensitiveBlockError()
+            assert chunk_resp.status.code == 0, f"error: {chunk_resp}"
+
+            # print(chunk_resp.data)
+            chunk = chunk_resp.data
+            usage = chunk['usage']
+            usage = {
+                'prompt_tokens': usage['prompt_tokens'],
+                'completion_tokens': usage['completion_tokens'],
+                'knowledge_tokens': usage['knowledge_tokens'],
+            }
+            choice0 = chunk['choices'][0]
+            role = choice0.get('role')
+            if choice0['finish_reason']:
+                finish_reason = choice0['finish_reason']
+            result_buffer += choice0['delta']
+            if choice0['delta'] and first_token_time is None:
+                first_token_time = time.time()
+
+            yield LlmResponseChunk(
+                role=role or 'assistant',
+                delta_content=choice0['delta'],
+                accumulated_content=result_buffer,
+                # extra={'usage': usage,}
+            )
+
+        completion_time = time.time()
+
+        yield LlmResponseTotal(
+            role=role or 'assistant',
             accumulated_content=result_buffer,
             finish_reason=finish_reason,
             usage=usage,

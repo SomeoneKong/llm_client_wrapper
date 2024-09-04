@@ -13,6 +13,7 @@ from .openai_impl import OpenAI_Client
 
 class Yi_Client(OpenAI_Client):
     support_system_message: bool = True
+    support_image_message: bool = True
 
     server_location = 'china'
 
@@ -23,6 +24,13 @@ class Yi_Client(OpenAI_Client):
             api_base_url="https://api.lingyiwanwu.com/v1",
             api_key=api_key,
         )
+
+    async def multimodal_chat_stream_async(self, model_name, history: List, model_param, client_param):
+        model_param = model_param.copy()
+        assert model_name in ['yi-vision'], f'Model {model_name} not support vl'
+
+        async for chunk in super().multimodal_chat_stream_async(model_name, history, model_param, client_param):
+            yield chunk
 
 
 if __name__ == '__main__':
