@@ -3,10 +3,12 @@
 import os
 import time
 
-import llm_client_base
+from llm_client_base import *
+from typing import List
 
 # pip install google-generativeai
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 # config from .env
 # GOOGLE_API_KEY
@@ -14,12 +16,10 @@ import google.generativeai as genai
 # HTTPS_PROXY
 
 
-# os.environ['HTTP_PROXY'] = "http://127.0.0.1:7890/"
-# os.environ['HTTPS_PROXY'] = "http://127.0.0.1:7890/"
-
-
-class Gemini_Client(llm_client_base.LlmClientBase):
+class Gemini_Client(LlmClientBase):
     support_system_message: bool = True
+
+    server_location = 'west'
 
     def __init__(self):
         super().__init__()
@@ -65,9 +65,16 @@ class Gemini_Client(llm_client_base.LlmClientBase):
 
         start_time = time.time()
 
-        response = model.generate_content_async(messages,
-                                                generation_config=generation_config,
-                                                stream=True)
+        response = model.generate_content_async(
+            messages,
+            generation_config=generation_config,
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            },
+            stream=True)
 
         role = None
         result_buffer = ''
@@ -85,11 +92,11 @@ class Gemini_Client(llm_client_base.LlmClientBase):
                         first_token_time = time.time()
 
                     role = self.role_convert_to_openai(delta_info.content.role)
-                    yield {
-                        'role': role,
-                        'delta_content': delta_info.content.parts[0].text,
-                        'accumulated_content': result_buffer,
-                    }
+                    yield LlmResponseChunk(
+                        role=role,
+                        delta_content=delta_info.content.parts[0].text,
+                        accumulated_content=result_buffer,
+                    )
 
         completion_time = time.time()
 
@@ -100,19 +107,22 @@ class Gemini_Client(llm_client_base.LlmClientBase):
                 'completion_tokens': model.count_tokens(result_buffer).total_tokens,
             }
 
-        yield {
-            'role': role,
-            'accumulated_content': result_buffer,
-            'finish_reason': finish_reason,
-            'usage': usage,
-            'first_token_time': first_token_time - start_time if first_token_time else None,
-            'completion_time': completion_time - start_time,
-        }
+        yield LlmResponseTotal(
+            role=role,
+            accumulated_content=result_buffer,
+            finish_reason=finish_reason,
+            usage=usage,
+            first_token_time=first_token_time - start_time if first_token_time else completion_time - start_time,
+            completion_time=completion_time - start_time,
+        )
 
 
 if __name__ == '__main__':
     import asyncio
     import os
+
+    os.environ['HTTP_PROXY'] = "http://127.0.0.1:7890/"
+    os.environ['HTTPS_PROXY'] = "http://127.0.0.1:7890/"
 
     client = Gemini_Client()
     model_name = "gemini-1.5-pro-latest"

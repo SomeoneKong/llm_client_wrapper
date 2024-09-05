@@ -2,7 +2,7 @@
 
 import os
 
-import llm_client_base
+from llm_client_base import *
 import openai
 from .openai_impl import OpenAI_Client
 
@@ -12,6 +12,8 @@ from .openai_impl import OpenAI_Client
 
 class DeepSeek_Client(OpenAI_Client):
     support_system_message: bool = True
+
+    server_location = 'china'
 
     def __init__(self):
         api_key = os.getenv('DEEPSEEK_API_KEY')
@@ -27,7 +29,7 @@ class DeepSeek_Client(OpenAI_Client):
                 yield chunk
         except openai.BadRequestError as e:
             if 'Content Exists Risk' in e.message:
-                raise llm_client_base.SensitiveBlockError() from e
+                raise SensitiveBlockError() from e
 
             raise
 

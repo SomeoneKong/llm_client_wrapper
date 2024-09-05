@@ -1,6 +1,8 @@
 import time
 import os
-import llm_client_base
+
+from llm_client_base import *
+from typing import List
 
 # pip install anthropic[vertex]
 from anthropic.lib.vertex import AsyncAnthropicVertex
@@ -11,8 +13,10 @@ from anthropic.lib.vertex import AsyncAnthropicVertex
 # HTTPS_PROXY
 
 
-class AnthropicVertex_Client(llm_client_base.LlmClientBase):
+class AnthropicVertex_Client(LlmClientBase):
     support_system_message: bool = True
+
+    server_location = 'west'
 
     def __init__(self,
                  google_auth_json_file=None,
@@ -73,11 +77,11 @@ class AnthropicVertex_Client(llm_client_base.LlmClientBase):
                 current_message = stream.current_message_snapshot
                 if delta and first_token_time is None:
                     first_token_time = time.time()
-                yield {
-                    'role': current_message.role,
-                    'delta_content': delta,
-                    'accumulated_content': current_message.content[0].text,
-                }
+                yield LlmResponseChunk(
+                    role=current_message.role,
+                    delta_content=delta,
+                    accumulated_content=current_message.content[0].text,
+                )
 
         completion_time = time.time()
 
@@ -85,15 +89,15 @@ class AnthropicVertex_Client(llm_client_base.LlmClientBase):
             'prompt_tokens': current_message.usage.input_tokens,
             'completion_tokens': current_message.usage.output_tokens,
         }
-        yield {
-            'role': current_message.role,
-            'accumulated_content': current_message.content[0].text,
-            'finish_reason': current_message.stop_reason,
-            'usage': usage,
-            'real_model': current_message.model,
-            'first_token_time': first_token_time - start_time if first_token_time else None,
-            'completion_time': completion_time - start_time,
-        }
+        yield LlmResponseTotal(
+            role=current_message.role,
+            accumulated_content=current_message.content[0].text,
+            finish_reason=current_message.stop_reason,
+            real_model=current_message.model,
+            usage=usage,
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+        )
 
     async def close(self):
         await self.client.close()

@@ -5,7 +5,7 @@ import time
 import aiohttp
 import json
 
-import llm_client_base
+from llm_client_base import *
 
 from .openai_impl import OpenAI_Client
 
@@ -17,6 +17,8 @@ class Minimax_Client(OpenAI_Client):
     support_system_message: bool = True
     support_chat_with_bot_profile_simple: bool = True
     support_multi_bot_chat: bool = True
+
+    server_location = 'china'
 
     def __init__(self):
         api_key = os.getenv('MINIMAX_API_KEY')
@@ -34,9 +36,13 @@ class Minimax_Client(OpenAI_Client):
         if 'max_tokens' not in temp_model_param:
             temp_model_param['max_tokens'] = 2048  # 官方默认值为256，太短
 
+        has_delta_chunk = False
+
         async for chunk in super().chat_stream_async(model_name, history, model_param, client_param):
-            if 'finish_reason' in chunk:
-                assert chunk.get('first_token_time', None) is not None, f"minimax return empty"
+            if chunk.is_end:
+                assert has_delta_chunk, f"minimax return empty"
+            else:
+                has_delta_chunk = True
 
             yield chunk
 
@@ -122,22 +128,23 @@ class Minimax_Client(OpenAI_Client):
                         if first_token_time is None:
                             first_token_time = time.time()
 
-                        yield {
-                            'role': role,
-                            'delta_content': delta_data,
-                            'accumulated_content': result_buffer,
-                        }
+                        yield LlmResponseChunk(
+                            role=role,
+                            delta_content=delta_data,
+                            accumulated_content=result_buffer,
+                        )
 
         completion_time = time.time()
 
-        yield {
-            'role': role,
-            'accumulated_content': result_buffer,
-            'finish_reason': finish_reason,
-            'usage': usage,
-            'first_token_time': first_token_time - start_time if first_token_time else None,
-            'completion_time': completion_time - start_time,
-        }
+        yield LlmResponseTotal(
+            role=role,
+            accumulated_content=result_buffer,
+            finish_reason=finish_reason,
+            usage=usage,
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+        )
+
 
     async def _chat_with_bot_profile_simple(self, model_name, history, bot_profile_dict, model_param, client_param):
         async for chunk in self._chat_pro_stream_async(model_name, history, bot_profile_dict, model_param, client_param):

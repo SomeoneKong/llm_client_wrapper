@@ -3,8 +3,8 @@
 import os
 import time
 
-import llm_client_base
-
+from llm_client_base import *
+from typing import List
 from openai import AsyncOpenAI
 
 # config from .env
@@ -13,8 +13,10 @@ from openai import AsyncOpenAI
 # HTTPS_PROXY
 
 
-class OpenAI_Client(llm_client_base.LlmClientBase):
+class OpenAI_Client(LlmClientBase):
     support_system_message: bool = True
+
+    server_location = 'west'
 
     def __init__(self,
                  api_base_url=None,
@@ -26,26 +28,19 @@ class OpenAI_Client(llm_client_base.LlmClientBase):
             api_key=api_key,
         )
 
-    async def chat_stream_async(self, model_name, history, model_param, client_param):
+    async def close(self):
+        await self.client.close()
+        await super().close()
+
+    def _extract_args(self, model_name, model_param, client_param):
         model_param = model_param.copy()
         temperature = model_param.pop('temperature')
         max_tokens = model_param.pop('max_tokens', None)
         tools = model_param.pop('tools', None)
-        json_mode = client_param.get('json_mode', False)
-
-        start_time = time.time()
-
-        system_fingerprint = None
-        role = None
-        result_buffer = ''
-        finish_reason = None
-        usage = None
-        first_token_time = None
-        real_model = None
+        json_mode = model_param.get('json_mode', False)
 
         req_args = dict(
             model=model_name,
-            messages=history,
             temperature=temperature,
             stream=True,
             stream_options={'include_usage': True},
@@ -56,8 +51,24 @@ class OpenAI_Client(llm_client_base.LlmClientBase):
             req_args['max_tokens'] = max_tokens
         if tools:
             req_args['tools'] = tools
-        if model_param:
-            req_args['extra_body'] = model_param
+
+        return req_args, model_param, client_param
+
+    async def chat_stream_async(self, model_name, history, model_param, client_param):
+        req_args, left_model_param, left_client_param = self._extract_args(model_name, model_param, client_param)
+        req_args['messages'] = history
+        if left_model_param:
+            req_args['extra_body'] = left_model_param
+
+        start_time = time.time()
+
+        system_fingerprint = None
+        role = None
+        result_buffer = ''
+        finish_reason = None
+        usage = None
+        first_token_time = None
+        real_model = None
 
         async with await self.client.chat.completions.create(**req_args) as response:
             async for chunk in response:
@@ -75,11 +86,12 @@ class OpenAI_Client(llm_client_base.LlmClientBase):
                             if first_token_time is None:
                                 first_token_time = time.time()
 
-                            yield {
-                                'role': role,
-                                'delta_content': delta_info.content,
-                                'accumulated_content': result_buffer,
-                            }
+                            yield LlmResponseChunk(
+                                role=role,
+                                delta_content=delta_info.content,
+                                accumulated_content=result_buffer,
+                            )
+
                 if chunk.usage:
                     usage = chunk.usage.dict()
                 if chunk.model:
@@ -88,19 +100,16 @@ class OpenAI_Client(llm_client_base.LlmClientBase):
 
         completion_time = time.time()
 
-        yield {
-            'role': role,
-            'accumulated_content': result_buffer,
-            'finish_reason': finish_reason,
-            'system_fingerprint': system_fingerprint,
-            'real_model': real_model,
-            'usage': usage or {},
-            'first_token_time': first_token_time - start_time if first_token_time else None,
-            'completion_time': completion_time - start_time,
-        }
-
-    async def close(self):
-        await self.client.close()
+        yield LlmResponseTotal(
+            role=role,
+            accumulated_content=result_buffer,
+            finish_reason=finish_reason,
+            system_fingerprint=system_fingerprint,
+            real_model=real_model,
+            usage=usage or {},
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+        )
 
 
 if __name__ == '__main__':

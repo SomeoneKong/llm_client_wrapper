@@ -3,7 +3,7 @@
 import os
 import time
 
-import llm_client_base
+from llm_client_base import *
 
 # pip install qianfan
 import qianfan
@@ -13,8 +13,10 @@ import qianfan
 # QIANFAN_SECRET_KEY
 
 
-class Baidu_Client(llm_client_base.LlmClientBase):
+class Baidu_Client(LlmClientBase):
     support_system_message: bool = True
+
+    server_location = 'china'
 
     def __init__(self):
         super().__init__()
@@ -56,25 +58,27 @@ class Baidu_Client(llm_client_base.LlmClientBase):
             if chunk['result'] and first_token_time is None:
                 first_token_time = time.time()
 
-            yield {
-                'role': role,
-                'delta_content': chunk['result'],
-                'accumulated_content': result_buffer,
-            }
+            yield LlmResponseChunk(
+                role=role,
+                delta_content=chunk['result'],
+                accumulated_content=result_buffer,
+            )
 
         completion_time = time.time()
 
         rate_limit_info = {k[2:]: v for k, v in response_headers.items() if k.startswith('X-Ratelimit')}
 
-        yield {
-            'role': role,
-            'accumulated_content': result_buffer,
-            'finish_reason': 0,
-            'usage': usage,
-            'rate_limit_info': rate_limit_info,
-            'first_token_time': first_token_time - start_time if first_token_time else None,
-            'completion_time': completion_time - start_time,
-        }
+        yield LlmResponseTotal(
+            role=role,
+            accumulated_content=result_buffer,
+            finish_reason=None,
+            usage=usage,
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+            extra={
+                'rate_limit_info': rate_limit_info,
+            }
+        )
 
 
 if __name__ == '__main__':

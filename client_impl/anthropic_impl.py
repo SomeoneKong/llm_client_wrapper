@@ -1,6 +1,6 @@
 import time
 
-import llm_client_base
+from llm_client_base import *
 
 # pip install anthropic
 import anthropic
@@ -12,8 +12,10 @@ import anthropic
 
 
 
-class Anthropic_Client(llm_client_base.LlmClientBase):
+class Anthropic_Client(LlmClientBase):
     support_system_message: bool = True
+
+    server_location = 'west'
 
     def __init__(self):
         super().__init__()
@@ -49,11 +51,12 @@ class Anthropic_Client(llm_client_base.LlmClientBase):
                 current_message = stream.current_message_snapshot
                 if delta and first_token_time is None:
                     first_token_time = time.time()
-                yield {
-                    'role': current_message.role,
-                    'delta_content': delta,
-                    'accumulated_content': current_message.content[0].text,
-                }
+
+                yield LlmResponseChunk(
+                    role=current_message.role,
+                    delta_content=delta,
+                    accumulated_content=current_message.content[0].text,
+                )
 
         completion_time = time.time()
 
@@ -61,15 +64,16 @@ class Anthropic_Client(llm_client_base.LlmClientBase):
             'prompt_tokens': current_message.usage.input_tokens,
             'completion_tokens': current_message.usage.output_tokens,
         }
-        yield {
-            'role': current_message.role,
-            'accumulated_content': current_message.content[0].text,
-            'finish_reason': current_message.stop_reason,
-            'real_model': current_message.model,
-            'usage': usage,
-            'first_token_time': first_token_time - start_time if first_token_time else None,
-            'completion_time': completion_time - start_time,
-        }
+
+        yield LlmResponseTotal(
+            role=current_message.role,
+            accumulated_content=current_message.content[0].text,
+            finish_reason=current_message.stop_reason,
+            real_model=current_message.model,
+            usage=usage,
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+        )
 
     async def close(self):
         await self.client.close()

@@ -3,7 +3,8 @@
 import os
 import time
 
-import llm_client_base
+from llm_client_base import *
+from typing import List
 
 from reka import ChatMessage
 from reka.client import AsyncReka
@@ -12,8 +13,10 @@ from reka.client import AsyncReka
 # REKA_API_KEY
 
 
-class Reka_Client(llm_client_base.LlmClientBase):
+class Reka_Client(LlmClientBase):
     support_system_message: bool = False
+
+    server_location = 'west'
 
     def __init__(self):
         super().__init__()
@@ -64,23 +67,23 @@ class Reka_Client(llm_client_base.LlmClientBase):
                     first_token_time = time.time()
 
                 if delta:
-                    yield {
-                        'role': role,
-                        'delta_content': delta,
-                        'accumulated_content': result_buffer,
-                        'usage': usage,
-                    }
+                    yield LlmResponseChunk(
+                        role=role,
+                        delta_content=delta,
+                        accumulated_content=result_buffer,
+                        # usage
+                    )
 
         completion_time = time.time()
 
-        yield {
-            'role': role,
-            'accumulated_content': result_buffer,
-            'finish_reason': finish_reason,
-            'usage': usage,
-            'first_token_time': first_token_time - start_time if first_token_time else None,
-            'completion_time': completion_time - start_time,
-        }
+        yield LlmResponseTotal(
+            role=role,
+            accumulated_content=result_buffer,
+            finish_reason=finish_reason,
+            usage=usage,
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+        )
 
 
 if __name__ == '__main__':

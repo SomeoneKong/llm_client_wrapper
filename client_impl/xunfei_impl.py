@@ -3,7 +3,8 @@
 import os
 import time
 
-import llm_client_base
+from llm_client_base import *
+from typing import List
 import openai
 from .openai_impl import OpenAI_Client
 
@@ -15,6 +16,8 @@ class Xunfei_Client(OpenAI_Client):
     # https://www.xfyun.cn/doc/spark/HTTP%E8%B0%83%E7%94%A8%E6%96%87%E6%A1%A3.html
 
     support_system_message: bool = True
+
+    server_location = 'china'
 
     def __init__(self):
         self.api_key = os.getenv('SPARKAI_HTTP_API_KEY')

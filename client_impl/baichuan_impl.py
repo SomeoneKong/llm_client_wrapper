@@ -14,6 +14,8 @@ class Baichuan_Client(OpenAI_Client):
     support_system_message: bool = True
     support_chat_with_bot_profile_simple: bool = True
 
+    server_location = 'china'
+
     def __init__(self):
         api_key = os.getenv('BAICHUAN_API_KEY')
 
@@ -24,7 +26,7 @@ class Baichuan_Client(OpenAI_Client):
 
     async def chat_stream_async(self, model_name, history, model_param, client_param):
         async for chunk in super().chat_stream_async(model_name, history, model_param, client_param):
-            usage = chunk.get('usage', {})
+            usage = chunk.usage
             if usage.get('completion_tokens', None) == 0:
                 assert False, f"Baichuan return empty"
 

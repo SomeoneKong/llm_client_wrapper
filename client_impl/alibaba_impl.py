@@ -2,7 +2,8 @@
 
 import os
 
-import llm_client_base
+from llm_client_base import *
+from typing import List
 
 from .openai_impl import OpenAI_Client
 
@@ -12,6 +13,8 @@ from .openai_impl import OpenAI_Client
 
 class Alibaba_Client(OpenAI_Client):
     support_system_message: bool = True
+
+    server_location = 'china'
 
     def __init__(self):
         api_key = os.getenv('DASHSCOPE_API_KEY')

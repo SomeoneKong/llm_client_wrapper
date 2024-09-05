@@ -13,6 +13,8 @@ from .openai_impl import OpenAI_Client
 class ByteDance_Client(OpenAI_Client):
     support_system_message: bool = True
 
+    server_location = 'china'
+
     def __init__(self):
         api_key = os.getenv('VOLC_API_KEY')
 

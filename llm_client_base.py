@@ -1,6 +1,35 @@
 import json
 
+from typing import Optional
+from typing_extensions import Literal
+
 import aiohttp
+
+from pydantic import BaseModel
+
+
+class LlmResponseChunk(BaseModel):
+    is_end: bool = False
+    role: str
+    delta_content: str
+    accumulated_content: str
+    extra: Optional[dict] = None
+
+class LlmResponseTotal(BaseModel):
+    is_end: bool = True
+    role: str
+
+    accumulated_content: str
+    finish_reason: Optional[str]
+
+    first_token_time: Optional[float]
+    completion_time: float
+
+    usage: Optional[dict]
+    real_model: Optional[str] = None
+    system_fingerprint: Optional[str] = None
+
+    extra: Optional[dict] = None
 
 
 class LlmClientBase:
@@ -9,11 +38,19 @@ class LlmClientBase:
     support_chat_with_bot_profile_simple: bool = False
     support_multi_bot_chat: bool = False
 
+    server_location: Literal['china', 'west']
+
     async def chat_stream_async(self, model_name, history, model_param, client_param):
         raise NotImplementedError()
 
     async def close(self):
         pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.close()
 
     async def _parse_sse_response(self, response: aiohttp.ClientResponse):
         pending = None
@@ -115,7 +152,7 @@ class LlmClientBase:
             async for chunk in self._chat_with_bot_profile_simple(model_name, step_history, step_bot_setting, model_param, client_param):
                 pass
 
-            round_resp_context = chunk.get('accumulated_content', None)
+            round_resp_content = chunk.get('accumulated_content', None)
             call_detail = {
                 'round_idx': round_idx,
                 'finish_reason': chunk.get('finish_reason', None),
@@ -126,14 +163,14 @@ class LlmClientBase:
 
             accumulated_history.append({
                 'bot_name': next_bot,
-                'content': round_resp_context,
+                'content': round_resp_content,
                 'call_detail': call_detail,
             })
 
             yield {
                 'round_idx': round_idx,
                 'bot_name': next_bot,
-                'content': round_resp_context,
+                'content': round_resp_content,
                 'call_detail': call_detail,
             }
 

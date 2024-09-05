@@ -1,7 +1,8 @@
 
 import os
 
-import llm_client_base
+from llm_client_base import *
+from typing import List
 from .openai_impl import OpenAI_Client
 
 # config from .env
@@ -13,6 +14,8 @@ from .openai_impl import OpenAI_Client
 class Zhipu_Client(OpenAI_Client):
     support_system_message: bool = True
     support_chat_with_bot_profile_simple: bool = True
+
+    server_location = 'china'
 
     def __init__(self):
         api_key = os.getenv('ZHIPU_API_KEY')
@@ -45,7 +48,7 @@ if __name__ == '__main__':
     import os
 
     client = Zhipu_Client()
-    model_name = "glm-3-turbo"
+    model_name = "glm-4-flash"
     history = [{"role": "user", "content": "Hello, how are you?"}]
 
     model_param = {

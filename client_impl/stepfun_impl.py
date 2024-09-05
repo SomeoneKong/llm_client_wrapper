@@ -1,9 +1,11 @@
 
 
 import os
-import openai
-import llm_client_base
 
+from llm_client_base import *
+from typing import List
+
+import openai
 from .openai_impl import OpenAI_Client
 
 # config from .env
@@ -12,6 +14,8 @@ from .openai_impl import OpenAI_Client
 
 class StepFun_Client(OpenAI_Client):
     support_system_message: bool = True
+
+    server_location = 'china'
 
     def __init__(self):
         api_key = os.getenv('STEPFUN_API_KEY')
@@ -27,7 +31,7 @@ class StepFun_Client(OpenAI_Client):
                 yield chunk
         except openai.APIStatusError as e:
             if 'censorship_blocked' in e.message:
-                raise llm_client_base.SensitiveBlockError() from e
+                raise SensitiveBlockError() from e
 
             raise
 

@@ -14,6 +14,8 @@ from .openai_impl import OpenAI_Client
 class OpenRouter_Client(OpenAI_Client):
     support_system_message: bool = True
 
+    server_location = 'west'
+
     def __init__(self):
         api_key = os.getenv('OPENROUTER_API_KEY')
         assert api_key is not None

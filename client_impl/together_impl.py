@@ -3,7 +3,7 @@
 import os
 import time
 
-import llm_client_base
+from llm_client_base import *
 
 from together import AsyncTogether
 
@@ -11,8 +11,10 @@ from together import AsyncTogether
 # TOGETHER_API_KEY
 
 
-class Together_Client(llm_client_base.LlmClientBase):
+class Together_Client(LlmClientBase):
     support_system_message: bool = True
+
+    server_location = 'west'
 
     def __init__(self):
         super().__init__()
@@ -55,22 +57,23 @@ class Together_Client(llm_client_base.LlmClientBase):
 
             result_buffer += choice0.delta.content
             # print(choice0.delta.content)
-            yield {
-                'role': choice0.delta.role,
-                'delta_content': choice0.delta.content,
-                'accumulated_content': result_buffer,
-            }
+
+            yield LlmResponseChunk(
+                role=choice0.delta.role,
+                delta_content=choice0.delta.content,
+                accumulated_content=result_buffer,
+            )
 
         completion_time = time.time()
 
-        yield {
-            'role': role,
-            'accumulated_content': result_buffer,
-            'finish_reason': finish_reason,
-            'usage': usage or {},
-            'first_token_time': first_token_time - start_time if first_token_time else None,
-            'completion_time': completion_time - start_time,
-        }
+        yield LlmResponseTotal(
+            role=role,
+            accumulated_content=result_buffer,
+            finish_reason=finish_reason,
+            usage=usage or {},
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+        )
 
 
 if __name__ == '__main__':

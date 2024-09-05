@@ -5,17 +5,20 @@ import hashlib, hmac
 import datetime
 import aiohttp
 
-import llm_client_base
+from llm_client_base import *
+from typing import List
 
 # config from .env
 # TENCENT_SECRET_ID
 # TENCENT_SECRET_KEY
 
 
-class Tencent_Client(llm_client_base.LlmClientBase):
+class Tencent_Client(LlmClientBase):
     # https://cloud.tencent.com/document/product/1729/105701
 
     support_system_message: bool = True
+
+    server_location = 'china'
 
     def __init__(self):
         super().__init__()

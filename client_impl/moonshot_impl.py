@@ -14,6 +14,8 @@ from .openai_impl import OpenAI_Client
 class Moonshot_Client(OpenAI_Client):
     support_system_message: bool = True
 
+    server_location = 'china'
+
     def __init__(self):
         api_key = os.getenv('MOONSHOT_API_KEY')
         assert api_key is not None
@@ -45,11 +47,11 @@ class Moonshot_Client(OpenAI_Client):
         force_calc_token_num = client_param.get('force_calc_token_num', False)
 
         async for chunk in super().chat_stream_async(model_name, history, model_param, client_param):
-            if force_calc_token_num and 'finish_reason' in chunk:
+            if force_calc_token_num and chunk.is_end and len(chunk.usage or {}) == 0:
                 prompt_token_num = await self.count_token(model_name, history)
-                completion_message = {"role": chunk['role'], "content": chunk['accumulated_content']}
+                completion_message = {"role": chunk.role, "content": chunk.accumulated_content}
                 completion_token_num = await self.count_token(model_name, [completion_message])
-                chunk['usage'] = {
+                chunk.usage = {
                     'prompt_tokens': prompt_token_num,
                     'completion_tokens': completion_token_num,
                 }

@@ -2,7 +2,8 @@
 
 import os
 
-import llm_client_base
+from llm_client_base import *
+from typing import List
 
 from .openai_impl import OpenAI_Client
 
@@ -12,6 +13,8 @@ from .openai_impl import OpenAI_Client
 
 class Yi_Client(OpenAI_Client):
     support_system_message: bool = True
+
+    server_location = 'china'
 
     def __init__(self):
         api_key = os.getenv('YI_API_KEY')

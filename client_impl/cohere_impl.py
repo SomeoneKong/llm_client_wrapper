@@ -3,7 +3,7 @@
 import os
 import time
 
-import llm_client_base
+from llm_client_base import *
 
 import cohere
 
@@ -11,8 +11,10 @@ import cohere
 # COHERE_API_KEY
 
 
-class Cohere_Client(llm_client_base.LlmClientBase):
+class Cohere_Client(LlmClientBase):
     support_system_message: bool = True
+
+    server_location = 'west'
 
     def __init__(self):
         super().__init__()
@@ -71,11 +73,12 @@ class Cohere_Client(llm_client_base.LlmClientBase):
 
                 result_buffer += chunk_str
                 # print(choice0.delta.content)
-                yield {
-                    'role': role,
-                    'delta_content': chunk_str,
-                    'accumulated_content': result_buffer,
-                }
+
+                yield LlmResponseChunk(
+                    role=role,
+                    delta_content=chunk_str,
+                    accumulated_content=result_buffer,
+                )
             elif chunk_resp.event_type == 'stream-end':
                 response_data = chunk_resp.response
                 finish_reason = response_data.finish_reason
@@ -88,14 +91,14 @@ class Cohere_Client(llm_client_base.LlmClientBase):
 
         completion_time = time.time()
 
-        yield {
-            'role': role,
-            'accumulated_content': result_buffer,
-            'finish_reason': finish_reason,
-            'usage': usage or {},
-            'first_token_time': first_token_time - start_time if first_token_time else None,
-            'completion_time': completion_time - start_time,
-        }
+        yield LlmResponseTotal(
+            role=role,
+            accumulated_content=result_buffer,
+            finish_reason=finish_reason,
+            usage=usage or {},
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+        )
 
 
 if __name__ == '__main__':

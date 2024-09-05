@@ -3,7 +3,8 @@
 import os
 import time
 
-import llm_client_base
+from llm_client_base import *
+from typing import List
 
 # pip install sensenova
 import sensenova
@@ -13,9 +14,11 @@ import sensenova
 # SENSENOVA_SECRET_KEY
 
 
-class SenseNova_Client(llm_client_base.LlmClientBase):
+class SenseNova_Client(LlmClientBase):
     support_system_message: bool = True
     support_multi_bot_chat: bool = True
+
+    server_location = 'china'
 
     def __init__(self):
         super().__init__()
@@ -52,7 +55,7 @@ class SenseNova_Client(llm_client_base.LlmClientBase):
 
         async for chunk_resp in response:
             if chunk_resp.status.code != 0 and chunk_resp.data.choices[0].finish_reason == 'sensitive':
-                raise llm_client_base.SensitiveBlockError()
+                raise SensitiveBlockError()
             assert chunk_resp.status.code == 0, f"error: {chunk_resp}"
 
             chunk = chunk_resp.data
@@ -70,23 +73,23 @@ class SenseNova_Client(llm_client_base.LlmClientBase):
             if choice0['delta'] and first_token_time is None:
                 first_token_time = time.time()
 
-            yield {
-                'role': role,
-                'delta_content': choice0['delta'],
-                'accumulated_content': result_buffer,
-                'usage': usage,
-            }
+            yield LlmResponseChunk(
+                role=role,
+                delta_content=choice0['delta'],
+                accumulated_content=result_buffer,
+                # extra={'usage': usage,}
+            )
 
         completion_time = time.time()
 
-        yield {
-            'role': role,
-            'accumulated_content': result_buffer,
-            'finish_reason': finish_reason,
-            'usage': usage,
-            'first_token_time': first_token_time - start_time if first_token_time else None,
-            'completion_time': completion_time - start_time,
-        }
+        yield LlmResponseTotal(
+            role=role,
+            accumulated_content=result_buffer,
+            finish_reason=finish_reason,
+            usage=usage,
+            first_token_time=first_token_time - start_time if first_token_time else None,
+            completion_time=completion_time - start_time,
+        )
 
     async def _multi_bot_chat(
             self,
@@ -154,7 +157,7 @@ class SenseNova_Client(llm_client_base.LlmClientBase):
         first_token_time = None
 
         if response.data.choices[0].finish_reason == 'sensitive':
-            raise llm_client_base.SensitiveBlockError()
+            raise SensitiveBlockError()
 
         chunk = response.data
         usage = chunk['usage']
