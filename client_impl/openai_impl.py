@@ -34,17 +34,18 @@ class OpenAI_Client(LlmClientBase):
 
     def _extract_args(self, model_name, model_param, client_param):
         model_param = model_param.copy()
-        temperature = model_param.pop('temperature')
+        temperature = model_param.pop('temperature', None)
         max_tokens = model_param.pop('max_tokens', None)
         tools = model_param.pop('tools', None)
         json_mode = model_param.get('json_mode', False)
 
         req_args = dict(
             model=model_name,
-            temperature=temperature,
             stream=True,
             stream_options={'include_usage': True},
         )
+        if temperature:
+            req_args['temperature'] = temperature
         if json_mode:
             req_args['response_format'] = {"type": "json_object"}
         if max_tokens:
@@ -53,6 +54,36 @@ class OpenAI_Client(LlmClientBase):
             req_args['tools'] = tools
 
         return req_args, model_param, client_param
+
+    async def chat_async(self, model_name, history, model_param, client_param):
+        req_args, left_model_param, left_client_param = self._extract_args(model_name, model_param, client_param)
+        req_args['messages'] = history
+        if left_model_param:
+            req_args['extra_body'] = left_model_param
+
+        req_args['stream'] = False
+
+        start_time = time.time()
+
+        response = await self.client.chat.completions.create(**req_args)
+        message = response.choices[0].message
+        # print(response)
+        completion_time = time.time()
+
+        usage = response.usage.dict()
+        if usage.get('completion_tokens_details') and 'reasoning_tokens' in usage['completion_tokens_details']:
+            usage['completion_tokens_details']['response_tokens'] = usage['completion_tokens'] - usage['completion_tokens_details']['reasoning_tokens']
+
+        return LlmResponseTotal(
+            role=message.role,
+            accumulated_content=message.content,
+            finish_reason=response.choices[0].finish_reason,
+            system_fingerprint=response.system_fingerprint,
+            real_model=response.model,
+            usage=usage,
+            first_token_time=None,
+            completion_time=completion_time - start_time,
+        )
 
     async def chat_stream_async(self, model_name, history, model_param, client_param):
         req_args, left_model_param, left_client_param = self._extract_args(model_name, model_param, client_param)
@@ -87,7 +118,7 @@ class OpenAI_Client(LlmClientBase):
                                 first_token_time = time.time()
 
                             yield LlmResponseChunk(
-                                role=role,
+                                role=role or 'assistant',
                                 delta_content=delta_info.content,
                                 accumulated_content=result_buffer,
                             )
@@ -97,11 +128,10 @@ class OpenAI_Client(LlmClientBase):
                 if chunk.model:
                     real_model = chunk.model
 
-
         completion_time = time.time()
 
         yield LlmResponseTotal(
-            role=role,
+            role=role or 'assistant',
             accumulated_content=result_buffer,
             finish_reason=finish_reason,
             system_fingerprint=system_fingerprint,
