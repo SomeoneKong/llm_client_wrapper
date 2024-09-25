@@ -37,6 +37,7 @@ class OpenAI_Client(LlmClientBase):
         temperature = model_param.pop('temperature', None)
         max_tokens = model_param.pop('max_tokens', None)
         tools = model_param.pop('tools', None)
+        functions = model_param.pop('functions', None)
         json_mode = model_param.get('json_mode', False)
 
         req_args = dict(
@@ -51,6 +52,15 @@ class OpenAI_Client(LlmClientBase):
         if max_tokens:
             req_args['max_tokens'] = max_tokens
         if tools:
+            req_args['tools'] = tools
+        elif functions:
+            tools = [
+                {
+                    'type': 'function',
+                    'function': f,
+                }
+                for f in functions
+            ]
             req_args['tools'] = tools
 
         return req_args, model_param, client_param
@@ -100,6 +110,7 @@ class OpenAI_Client(LlmClientBase):
         usage = None
         first_token_time = None
         real_model = None
+        function_call_info_list = []
 
         async with await self.client.chat.completions.create(**req_args) as response:
             async for chunk in response:
@@ -122,6 +133,31 @@ class OpenAI_Client(LlmClientBase):
                                 delta_content=delta_info.content,
                                 accumulated_content=result_buffer,
                             )
+                        elif delta_info.function_call:
+                            if first_token_time is None:
+                                first_token_time = time.time()
+
+                            if not function_call_info_list:
+                                function_call_info_list = [{}]
+                            if delta_info.function_call.name:
+                                function_call_info_list[0]['name'] = delta_info.function_call.name
+                            elif delta_info.function_call.arguments:
+                                function_call_info_list[0]['arguments'] = function_call_info_list[0].get('arguments', '') + delta_info.function_call.arguments
+                        elif delta_info.tool_calls:
+                            if first_token_time is None:
+                                first_token_time = time.time()
+
+                            for tool_call in delta_info.tool_calls:
+                                tool_call_idx = tool_call.index
+                                while len(function_call_info_list) <= tool_call_idx:
+                                    function_call_info_list.append({})
+
+                                if tool_call.id:
+                                    function_call_info_list[tool_call_idx]['id'] = tool_call.id
+                                if tool_call.function.name:
+                                    function_call_info_list[tool_call_idx]['name'] = tool_call.function.name
+                                if tool_call.function.arguments:
+                                    function_call_info_list[tool_call_idx]['arguments'] = function_call_info_list[tool_call_idx].get('arguments', '') + tool_call.function.arguments
 
                 if chunk.usage:
                     usage = chunk.usage.dict()
@@ -130,10 +166,19 @@ class OpenAI_Client(LlmClientBase):
 
         completion_time = time.time()
 
+        tool_call_args_result = []
+        for function_call_args in function_call_info_list:
+            tool_call_args_result.append(LlmToolCallInfo(
+                tool_call_id=function_call_args.get('id', None),
+                tool_name=function_call_args.get('name', None),
+                tool_args_json=function_call_args.get('arguments', None),
+            ))
+
         yield LlmResponseTotal(
             role=role or 'assistant',
             accumulated_content=result_buffer,
             finish_reason=finish_reason,
+            tool_calls=tool_call_args_result if tool_call_args_result else None,
             system_fingerprint=system_fingerprint,
             real_model=real_model,
             usage=usage or {},
@@ -151,6 +196,7 @@ if __name__ == '__main__':
 
     client = OpenAI_Client(api_key=os.getenv('OPENAI_API_KEY'))
     model_name = "gpt-4o-mini"
+
     history = [{"role": "user", "content": "Hello, how are you?"}]
 
     model_param = {

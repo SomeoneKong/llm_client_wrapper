@@ -1,6 +1,6 @@
 import json
 
-from typing import Optional
+from typing import Optional, List
 from typing_extensions import Literal
 
 import aiohttp
@@ -15,12 +15,19 @@ class LlmResponseChunk(BaseModel):
     accumulated_content: str
     extra: Optional[dict] = None
 
+class LlmToolCallInfo(BaseModel):
+    tool_call_id: Optional[str]  # 旧的functions没有这个字段
+    tool_name: str
+    tool_args_json: str
+
 class LlmResponseTotal(BaseModel):
     is_end: bool = True
     role: str
 
-    accumulated_content: str
+    accumulated_content: Optional[str]
     finish_reason: Optional[str]
+
+    tool_calls: Optional[List[LlmToolCallInfo]] = None
 
     first_token_time: Optional[float]
     completion_time: float
