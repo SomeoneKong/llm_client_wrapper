@@ -24,6 +24,7 @@
 * Token usage 字段的统一化
 * System message
 * 角色扮演模型的bot profile设定，及简单多轮对话模拟
+* VL模型的图像输入支持，Gemini已经支持音频和图像输入
 
 支持的Feature与我已经对各家API进行横评的进度有关。
 
@@ -36,7 +37,6 @@
 * Token count API
 * 知识库相关API
 * Context prefix cache
-* VL模型，其他多模态数据的支持
 * Assistant API，文件上传API
 
 ## 支持的LLM供应商列表
