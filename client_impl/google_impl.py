@@ -12,8 +12,6 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 # config from .env
 # GOOGLE_API_KEY
-# HTTP_PROXY
-# HTTPS_PROXY
 
 
 class Gemini_Client(LlmClientBase):
@@ -45,6 +43,14 @@ class Gemini_Client(LlmClientBase):
         else:
             return 'unknown'
 
+    def get_safety_settings(self):
+        return {
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+        }
+
     async def chat_stream_async(self, model_name, history, model_param, client_param):
         model_param = model_param.copy()
         temperature = model_param['temperature']
@@ -68,12 +74,7 @@ class Gemini_Client(LlmClientBase):
         response = model.generate_content_async(
             messages,
             generation_config=generation_config,
-            safety_settings={
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            },
+            safety_settings=self.get_safety_settings(),
             stream=True)
 
         role = None
@@ -102,9 +103,13 @@ class Gemini_Client(LlmClientBase):
 
         usage = None
         if force_calc_token_num:
+            prompt_token_num = model.count_tokens(messages).total_tokens
+            completion_token_num = 0
+            if result_buffer:
+                completion_token_num = model.count_tokens(result_buffer).total_tokens
             usage = {
-                'prompt_tokens': model.count_tokens(messages).total_tokens,
-                'completion_tokens': model.count_tokens(result_buffer).total_tokens,
+                'prompt_tokens': prompt_token_num,
+                'completion_tokens': completion_token_num,
             }
 
         yield LlmResponseTotal(

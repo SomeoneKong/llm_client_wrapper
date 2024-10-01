@@ -9,8 +9,6 @@ from anthropic.lib.vertex import AsyncAnthropicVertex
 
 # config from .env
 # GOOGLE_APPLICATION_CREDENTIALS
-# HTTP_PROXY
-# HTTPS_PROXY
 
 
 class AnthropicVertex_Client(LlmClientBase):
